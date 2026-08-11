@@ -252,7 +252,7 @@
     .btn-primary:not(:disabled):hover {
       background: var(--accent-hover);
       transform: translateY(-1px);
-      box-shadow: 0 4px 20px rgba(45, 125, 210, 0.3);
+      box-shadow: 0 4px 20px rgba(91, 158, 245, 0.3);
     }
 
     .btn:not(:disabled):active {
@@ -342,8 +342,8 @@
     #gameover-screen:not(.hidden) .gameover-title        { animation: fadeInUp 0.6s var(--ease-out) 0.1s backwards; }
     #gameover-screen:not(.hidden) .score-item:nth-child(1) { animation: fadeInUp 0.5s var(--ease-out) 0.3s backwards; }
     #gameover-screen:not(.hidden) .score-item:nth-child(2) { animation: fadeInUp 0.5s var(--ease-out) 0.45s backwards; }
-    #gameover-screen:not(.hidden) .btn-start              { animation: fadeInUp 0.5s var(--ease-out) 0.7s backwards; }
-    #gameover-screen:not(.hidden) #continue-btn           { animation: fadeInUp 0.5s var(--ease-out) 0.85s backwards; margin-top: 14px; }
+    #gameover-screen:not(.hidden) #continue-btn           { animation: fadeInUp 0.5s var(--ease-out) 0.7s backwards; }
+    #gameover-screen:not(.hidden) #restart-btn            { animation: fadeInUp 0.5s var(--ease-out) 0.85s backwards; margin-top: 14px; }
     #gameover-screen:not(.hidden) .btn-share              { animation: fadeInUp 0.5s var(--ease-out) 1.0s backwards; }
 
     .game-title {
@@ -386,8 +386,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(45, 125, 210, 0.08);
-      border: 1px solid rgba(45, 125, 210, 0.15);
+      background: rgba(91, 158, 245, 0.08);
+      border: 1px solid rgba(91, 158, 245, 0.15);
       border-radius: 6px;
       font-size: 12px;
       font-weight: 700;
@@ -407,14 +407,14 @@
       border-radius: 12px;
       cursor: pointer;
       transition: all 0.3s var(--ease-out);
-      box-shadow: 0 4px 20px rgba(45, 125, 210, 0.25);
+      box-shadow: 0 4px 20px rgba(91, 158, 245, 0.25);
       text-transform: uppercase;
     }
 
     .btn-start:hover {
       background: var(--accent-hover);
       transform: translateY(-2px);
-      box-shadow: 0 6px 28px rgba(45, 125, 210, 0.35);
+      box-shadow: 0 6px 28px rgba(91, 158, 245, 0.35);
     }
 
     .btn-start:active {
@@ -579,7 +579,7 @@
     .btn-share:hover {
       background: rgba(245, 247, 252, 0.95);
       color: var(--accent);
-      border-color: rgba(45, 125, 210, 0.25);
+      border-color: rgba(91, 158, 245, 0.25);
       transform: translateY(-1px);
       box-shadow: var(--shadow-sm);
     }
@@ -839,8 +839,8 @@
         <div class="new-record" id="new-record" style="display:none">新纪录！</div>
       </div>
     </div>
-    <button class="btn-start" id="restart-btn">再来一局</button>
     <button class="btn-start" id="continue-btn" style="display:none">继续挑战</button>
+    <button class="btn-start" id="restart-btn">再来一局</button>
     <button class="btn-share" id="gameover-share-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
@@ -1214,7 +1214,7 @@
     // 阶段文字渐变切换（先淡出 → 换文字+颜色 → 淡入）
     function setPhaseText(text, color) {
       dom.phaseText.style.opacity = '0';
-      setTimeout(() => {
+      trackedTimeout(() => {
         dom.phaseText.textContent = text;
         dom.phaseText.style.color = color || '';
         dom.phaseText.style.opacity = '';
