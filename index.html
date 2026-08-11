@@ -1,0 +1,1728 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>记忆方块 | Memory Cube</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :root {
+      --bg: #ffffff;
+      --bg-panel: rgba(248, 249, 252, 0.88);
+      --bg-glass: rgba(255, 255, 255, 0.72);
+      --text: #1a1a2e;
+      --text-dim: #8a8a9e;
+      --accent: #2d7dd2;
+      --accent-hover: #1a6cbf;
+      --green: #1ea672;
+      --red: #e0453b;
+      --orange: #f08c2e;
+      --gold: #d4a017;
+      --border: rgba(140, 140, 160, 0.18);
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+      --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.10);
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    body {
+      overflow: hidden;
+      background: var(--bg);
+      font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+    }
+
+    #canvas-container canvas {
+      display: block;
+      cursor: default;
+    }
+
+    /* === UI OVERLAY === */
+    #ui-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* === Top bar === */
+    #top-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+    }
+
+    .stat-block {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 16px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.4s var(--ease-spring), box-shadow 0.3s ease;
+    }
+
+    .stat-block.pulse {
+      animation: statPulse 0.5s var(--ease-spring);
+    }
+
+    @keyframes statPulse {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(1.12); box-shadow: var(--shadow-md); }
+      100% { transform: scale(1); }
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+    }
+
+    .stat-value {
+      font-family: "Courier New", monospace;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    /* === Center message — 玻璃态胶囊（顶部，不遮挡立方体） === */
+    #center-message {
+      position: absolute;
+      top: 64px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-10px);
+      text-align: center;
+      pointer-events: none;
+      opacity: 0;
+      max-width: calc(100vw - 32px);
+      transition: opacity 0.35s var(--ease-out), transform 0.35s var(--ease-out);
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px) saturate(1.4);
+      -webkit-backdrop-filter: blur(16px) saturate(1.4);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 12px 28px;
+      box-shadow: var(--shadow-md);
+    }
+
+    #center-message.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    #center-message .msg-main {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+    }
+
+    #center-message .msg-sub {
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-top: 4px;
+      font-weight: 500;
+    }
+
+    #center-message.info      .msg-main { color: var(--accent); }
+    #center-message.success   .msg-main { color: var(--green); }
+    #center-message.fail      .msg-main { color: var(--red); }
+    #center-message.highlight .msg-main { color: var(--gold); }
+
+    /* === Bottom bar === */
+    #bottom-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 20px 24px 28px;
+    }
+
+    #phase-text {
+      font-size: 13px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      height: 18px;
+      transition: opacity 0.25s ease, color 0.25s ease;
+    }
+
+    #action-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      width: 100%;
+      max-width: 440px;
+      justify-content: center;
+    }
+
+    .btn {
+      pointer-events: auto;
+      padding: 11px 28px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.25s var(--ease-out);
+      white-space: nowrap;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .btn-secondary {
+      background: rgba(240, 242, 248, 0.9);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:not(:disabled):hover {
+      background: rgba(230, 233, 242, 0.95);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:not(:disabled):hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(45, 125, 210, 0.3);
+    }
+
+    .btn:not(:disabled):active {
+      transform: translateY(0) scale(0.96);
+    }
+
+    /* === Timer bar === */
+    #timer-wrap {
+      flex: 1;
+      max-width: 180px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #timer-bar-bg {
+      width: 100%;
+      height: 6px;
+      background: rgba(200, 200, 215, 0.25);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    #timer-bar-fill {
+      height: 100%;
+      width: 100%;
+      border-radius: 3px;
+      transition: width 0.12s linear, background-color 0.4s ease;
+    }
+
+    #timer-text {
+      font-family: "Courier New", monospace;
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 0.5px;
+    }
+
+    /* === OVERLAY SCREENS === */
+    .overlay-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at center, rgba(245, 247, 252, 0.97) 0%, rgba(225, 230, 240, 0.98) 100%);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: opacity 0.5s var(--ease-out);
+      text-align: center;
+      padding: 24px;
+    }
+
+    .overlay-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* 关键修复：hidden 状态下强制所有子元素也不可交互，
+       防止按钮的 pointer-events:auto 穿透隐藏遮罩接收点击 */
+    .overlay-screen.hidden,
+    .overlay-screen.hidden * {
+      pointer-events: none !important;
+    }
+
+    /* === 入场动画 === */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Start screen 交错入场 */
+    #start-screen:not(.hidden) .game-title    { animation: fadeInUp 0.7s var(--ease-out) 0.1s backwards; }
+    #start-screen:not(.hidden) .game-subtitle { animation: fadeInUp 0.7s var(--ease-out) 0.2s backwards; }
+    #start-screen:not(.hidden) .instruction-row:nth-child(1) { animation: fadeInUp 0.5s var(--ease-out) 0.35s backwards; }
+    #start-screen:not(.hidden) .instruction-row:nth-child(2) { animation: fadeInUp 0.5s var(--ease-out) 0.45s backwards; }
+    #start-screen:not(.hidden) .instruction-row:nth-child(3) { animation: fadeInUp 0.5s var(--ease-out) 0.55s backwards; }
+    #start-screen:not(.hidden) .instruction-row:nth-child(4) { animation: fadeInUp 0.5s var(--ease-out) 0.65s backwards; }
+    #start-screen:not(.hidden) .instruction-row:nth-child(5) { animation: fadeInUp 0.5s var(--ease-out) 0.75s backwards; }
+    #start-screen:not(.hidden) .btn-start     { animation: fadeInUp 0.6s var(--ease-out) 0.9s backwards; }
+    #start-screen:not(.hidden) .best-display  { animation: fadeInUp 0.5s var(--ease-out) 1.1s backwards; }
+
+    /* Game over screen 交错揭示 */
+    #gameover-screen:not(.hidden) .gameover-title        { animation: fadeInUp 0.6s var(--ease-out) 0.1s backwards; }
+    #gameover-screen:not(.hidden) .score-item:nth-child(1) { animation: fadeInUp 0.5s var(--ease-out) 0.3s backwards; }
+    #gameover-screen:not(.hidden) .score-item:nth-child(2) { animation: fadeInUp 0.5s var(--ease-out) 0.45s backwards; }
+    #gameover-screen:not(.hidden) .btn-start              { animation: fadeInUp 0.5s var(--ease-out) 0.7s backwards; }
+
+    .game-title {
+      font-size: clamp(34px, 6vw, 56px);
+      font-weight: 900;
+      letter-spacing: 3px;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .game-subtitle {
+      font-size: 14px;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 36px;
+    }
+
+    .instructions {
+      max-width: 440px;
+      margin-bottom: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .instruction-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      color: var(--text-dim);
+      font-size: 14px;
+      line-height: 1.5;
+      text-align: left;
+    }
+
+    .instruction-num {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(45, 125, 210, 0.08);
+      border: 1px solid rgba(45, 125, 210, 0.15);
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .btn-start {
+      pointer-events: auto;
+      padding: 14px 44px;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #fff;
+      background: var(--accent);
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s var(--ease-out);
+      box-shadow: 0 4px 20px rgba(45, 125, 210, 0.25);
+      text-transform: uppercase;
+    }
+
+    .btn-start:hover {
+      background: var(--accent-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 28px rgba(45, 125, 210, 0.35);
+    }
+
+    .btn-start:active {
+      transform: translateY(0) scale(0.97);
+    }
+
+    .best-display {
+      margin-top: 24px;
+      font-size: 13px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+
+    .best-display span {
+      color: var(--gold);
+      font-family: "Courier New", monospace;
+      font-weight: 700;
+    }
+
+    .gameover-title {
+      font-size: clamp(30px, 5vw, 48px);
+      font-weight: 900;
+      letter-spacing: 3px;
+      color: var(--red);
+      margin-bottom: 28px;
+    }
+
+    .score-display {
+      display: flex;
+      gap: 36px;
+      margin-bottom: 36px;
+    }
+
+    .score-item {
+      text-align: center;
+    }
+
+    .score-item .score-label {
+      font-size: 12px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+
+    .score-item .score-number {
+      font-family: "Courier New", monospace;
+      font-size: 32px;
+      font-weight: 800;
+    }
+
+    .score-item.current .score-number { color: var(--accent); }
+    .score-item.best .score-number { color: var(--gold); }
+
+    .new-record {
+      font-size: 13px;
+      color: var(--gold);
+      margin-top: 4px;
+      font-weight: 600;
+      animation: blink 1.2s ease infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* === 进度提示 === */
+    #progress-display {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-dim);
+      letter-spacing: 0.5px;
+      height: 20px;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #progress-display.show { opacity: 1; }
+
+    #progress-display .progress-current {
+      font-family: "Courier New", monospace;
+      font-weight: 700;
+      color: var(--accent);
+      transition: color 0.3s ease;
+    }
+
+    #progress-display.complete .progress-current { color: var(--green); }
+
+    /* === 计时条紧迫脉冲 === */
+    @keyframes urgentPulse {
+      0%, 100% { transform: scaleY(1); }
+      50% { transform: scaleY(2.2); }
+    }
+
+    #timer-bar-fill.urgent {
+      animation: urgentPulse 0.5s ease infinite;
+    }
+
+    /* === 键盘快捷键提示（仅桌面端显示） === */
+    .keyboard-hint {
+      margin-top: 18px;
+      display: flex;
+      gap: 18px;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .keyboard-hint .key-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .keyboard-hint kbd {
+      display: inline-block;
+      padding: 2px 8px;
+      background: rgba(140, 140, 160, 0.08);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: "Courier New", monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    /* 触摸设备隐藏键盘提示 */
+    @media (hover: none) and (pointer: coarse) {
+      .keyboard-hint { display: none; }
+    }
+
+    /* === 庆祝光环 === */
+    #celebration-ring {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      border: 3px solid var(--green);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 5;
+      transform: translate(-50%, -50%);
+    }
+
+    #celebration-ring.active {
+      animation: ringExpand 1.2s var(--ease-out) forwards;
+    }
+
+    @keyframes ringExpand {
+      0%   { width: 0; height: 0; opacity: 0.7; border-width: 4px; }
+      50%  { opacity: 0.4; }
+      100% { width: 700px; height: 700px; opacity: 0; border-width: 1px; }
+    }
+
+    /* === 响应式 === */
+
+    /* 平板及以下 */
+    @media (max-width: 768px) {
+      #top-bar { padding: 12px 16px; }
+      .stat-block { padding: 6px 12px; gap: 6px; }
+      .stat-label { font-size: 10px; letter-spacing: 1px; }
+      .stat-value { font-size: 17px; }
+      #center-message { top: 52px; padding: 10px 22px; }
+      #center-message .msg-main { font-size: 20px; }
+      #center-message .msg-sub { font-size: 12px; }
+      #bottom-bar { padding: 14px 16px 20px; gap: 8px; }
+      .btn { padding: 10px 20px; font-size: 14px; }
+      #action-row { gap: 10px; }
+      #timer-wrap { max-width: 100px; }
+      #phase-text { font-size: 12px; }
+      #progress-display { font-size: 12px; }
+    }
+
+    /* 手机 */
+    @media (max-width: 480px) {
+      #top-bar { padding: 10px 12px; }
+      .stat-block { padding: 5px 10px; gap: 5px; }
+      .stat-label { font-size: 9px; letter-spacing: 0.5px; }
+      .stat-value { font-size: 15px; }
+      #center-message { top: 46px; padding: 8px 16px; border-radius: 12px; }
+      #center-message .msg-main { font-size: 17px; letter-spacing: 1px; }
+      #center-message .msg-sub { font-size: 11px; }
+      #bottom-bar { padding: 10px 12px 16px; gap: 6px; }
+      .btn { padding: 9px 16px; font-size: 13px; border-radius: 8px; }
+      #action-row { gap: 8px; }
+      #timer-wrap { max-width: 80px; }
+      #timer-bar-bg { height: 5px; }
+      #timer-text { font-size: 10px; }
+      #phase-text { font-size: 11px; }
+      #progress-display { font-size: 11px; }
+      .game-title { font-size: 32px; letter-spacing: 2px; }
+      .game-subtitle { font-size: 12px; margin-bottom: 24px; }
+      .instructions { gap: 8px; margin-bottom: 24px; }
+      .instruction-row { font-size: 13px; gap: 10px; }
+      .instruction-num { width: 22px; height: 22px; font-size: 11px; }
+      .btn-start { padding: 12px 36px; font-size: 15px; }
+      .gameover-title { font-size: 32px; margin-bottom: 20px; }
+      .score-display { gap: 28px; margin-bottom: 28px; }
+      .score-item .score-number { font-size: 26px; }
+      .best-display { font-size: 12px; margin-top: 20px; }
+    }
+
+    /* 小屏手机 */
+    @media (max-width: 360px) {
+      .stat-label { display: none; }
+      .stat-block { padding: 5px 8px; }
+      .stat-value { font-size: 14px; }
+      #center-message { top: 42px; padding: 7px 12px; }
+      #center-message .msg-main { font-size: 15px; }
+      #center-message .msg-sub { font-size: 10px; }
+      .btn { padding: 8px 14px; font-size: 12px; }
+      #timer-wrap { max-width: 64px; }
+      .game-title { font-size: 28px; }
+      .instruction-row { font-size: 12px; }
+    }
+
+    /* 横屏手机 — 减小上下栏高度 */
+    @media (max-height: 450px) and (orientation: landscape) {
+      #top-bar { padding: 6px 16px; }
+      .stat-block { padding: 4px 10px; }
+      .stat-value { font-size: 15px; }
+      .stat-label { font-size: 9px; }
+      #center-message { top: 40px; padding: 6px 18px; }
+      #center-message .msg-main { font-size: 16px; }
+      #center-message .msg-sub { font-size: 11px; }
+      #bottom-bar { padding: 6px 16px 10px; gap: 4px; }
+      .btn { padding: 7px 16px; font-size: 13px; }
+      #timer-bar-bg { height: 4px; }
+      #phase-text { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <div id="celebration-ring"></div>
+
+  <div id="ui-overlay">
+    <div id="top-bar">
+      <div class="stat-block">
+        <span class="stat-label">Level</span>
+        <span class="stat-value" id="level-value">1</span>
+      </div>
+      <div class="stat-block">
+        <span class="stat-label">Best</span>
+        <span class="stat-value" id="best-value">0</span>
+      </div>
+    </div>
+
+    <div id="center-message">
+      <div class="msg-main"></div>
+      <div class="msg-sub"></div>
+    </div>
+
+    <div id="bottom-bar">
+      <div id="phase-text"></div>
+      <div id="progress-display"></div>
+      <div id="action-row">
+        <button class="btn btn-secondary" id="reset-btn" disabled>重置</button>
+        <div id="timer-wrap">
+          <div id="timer-bar-bg"><div id="timer-bar-fill"></div></div>
+          <span id="timer-text"></span>
+        </div>
+        <button class="btn btn-primary" id="confirm-btn" disabled>确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Start screen -->
+  <div id="start-screen" class="overlay-screen">
+    <div class="game-title">记忆方块</div>
+    <div class="game-subtitle">Memory Cube</div>
+    <div class="instructions">
+      <div class="instruction-row">
+        <div class="instruction-num">1</div>
+        <span>屏幕上展示一个残缺的立方体，记住缺失的方块位置</span>
+      </div>
+      <div class="instruction-row">
+        <div class="instruction-num">2</div>
+        <span>残缺立方体消失，出现一个完整的立方体</span>
+      </div>
+      <div class="instruction-row">
+        <div class="instruction-num">3</div>
+        <span>点击方块将其消除，使形状与目标一致</span>
+      </div>
+      <div class="instruction-row">
+        <div class="instruction-num">4</div>
+        <span>点击「确定」提交，「重置」恢复全部方块</span>
+      </div>
+      <div class="instruction-row">
+        <div class="instruction-num">5</div>
+        <span>每关只有一次机会，失败即结束</span>
+      </div>
+    </div>
+    <button class="btn-start" id="start-btn">开始游戏</button>
+    <div class="best-display">最高记录: Level <span id="start-best">0</span></div>
+    <div class="keyboard-hint">
+      <span class="key-item"><kbd>Enter</kbd> 确认</span>
+      <span class="key-item"><kbd>R</kbd> 重置</span>
+      <span class="key-item"><kbd>Space</kbd> 开始</span>
+    </div>
+  </div>
+
+  <!-- Game over screen -->
+  <div id="gameover-screen" class="overlay-screen hidden">
+    <div class="gameover-title">游戏结束</div>
+    <div class="score-display">
+      <div class="score-item current">
+        <div class="score-label">本次到达</div>
+        <div class="score-number" id="final-level">0</div>
+      </div>
+      <div class="score-item best">
+        <div class="score-label">最高记录</div>
+        <div class="score-number" id="final-best">0</div>
+        <div class="new-record" id="new-record" style="display:none">新纪录！</div>
+      </div>
+    </div>
+    <button class="btn-start" id="restart-btn">再来一局</button>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { Line2 } from 'three/addons/lines/Line2.js';
+    import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+    import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+
+    // ============================================================
+    //  常量
+    // ============================================================
+    const GRID = 3;
+    const VOXEL_SIZE = 0.998;  // 几乎无间隙
+    const SPACING = 1.0;
+    const CAM_FRUSTUM = 7;  // 正交相机视锥大小
+
+    const GameState = {
+      MENU: 'menu',
+      SHOWING: 'showing',
+      CARVING: 'carving',
+      RESULT: 'result',
+      GAME_OVER: 'game_over'
+    };
+
+    // 方块外观状态 — 白色背景下蓝色立方体 + 白色粗边线
+    const EDGE_LINEWIDTH = 3;  // 边线粗细（像素）
+    const Appearance = {
+      CARVE: {
+        color: 0x3a8fd0, emissive: 0x000000, emissiveIntensity: 0,
+        edgeColor: 0xffffff, edgeOpacity: 0.85,
+        opacity: 1.0, scale: 1.0
+      },
+      TARGET: {
+        color: 0x2d7dd2, emissive: 0x1a5aa8, emissiveIntensity: 0.25,
+        edgeColor: 0xffffff, edgeOpacity: 0.8,
+        opacity: 1.0, scale: 1.0
+      },
+      REMOVED: {
+        color: 0x3a8fd0, emissive: 0x000000, emissiveIntensity: 0,
+        edgeColor: 0xffffff, edgeOpacity: 0,
+        opacity: 0, scale: 0
+      },
+      CORRECT: {
+        color: 0x1ea672, emissive: 0x147a50, emissiveIntensity: 0.25,
+        edgeColor: 0xffffff, edgeOpacity: 0.75,
+        opacity: 1.0, scale: 1.0
+      },
+      WRONG: {
+        color: 0xe0453b, emissive: 0xa02820, emissiveIntensity: 0.3,
+        edgeColor: 0xffffff, edgeOpacity: 0.75,
+        opacity: 0.9, scale: 1.0
+      },
+      MISSED: {
+        color: 0xf08c2e, emissive: 0xb06010, emissiveIntensity: 0.3,
+        edgeColor: 0xffffff, edgeOpacity: 0.75,
+        opacity: 0.9, scale: 1.0
+      },
+      HOVER: {
+        color: 0x6ab8ec, emissive: 0x2d7dd2, emissiveIntensity: 0.15,
+        edgeColor: 0xffffff, edgeOpacity: 1.0,
+        opacity: 1.0, scale: 1.06
+      }
+    };
+
+    // ============================================================
+    //  游戏变量
+    // ============================================================
+    let gameState = GameState.MENU;
+    let level = 1;
+    let bestLevel = 0;
+    let targetMissing = [];   // 目标缺失方块的索引
+    let playerRemoved = [];   // 玩家消除的方块索引
+    let visibleIndices = [];  // 可见面方块索引（19个）
+    let showStartTime = 0;
+    let showDuration = 5000;
+    let carveStartTime = 0;
+    let carveDuration = 30000;
+    let audioCtx = null;
+    let pendingTimeouts = [];   // 追踪所有 setTimeout，防止竞态
+    let resultProcessed = false; // 防止 confirmCarving 重复执行
+    let hoveredIndex = -1;       // 当前 hover 的方块索引
+    let removeSoundStep = 0;     // 渐进音效步数（每关/重置后归零）
+    let entryStartTime = 0;      // 入场动画起始时间
+    let isTransitioning = false; // 阶段过渡中标志
+    let lastTickSecond = -1;     // 上次播放 tick 音的秒数
+    let isMobile = false;        // 是否移动端
+
+    // ============================================================
+    //  Three.js
+    // ============================================================
+    let scene, camera, renderer, raycaster, pointer;
+    const voxels = [];
+    const edgeMaterials = [];  // 追踪所有 LineMaterial，用于 resize 时更新分辨率
+
+    // 根据屏幕宽高比动态计算相机距离，保证立方体始终完整可见
+    // 相机始终在 (d,d,d) 方向，保持等轴测视角
+    function calcCameraDistance(aspect) {
+      const fov = 35;
+      const fovRad = (fov * Math.PI) / 180;
+      const tanHalf = Math.tan(fovRad / 2);
+      const sqrt3 = Math.sqrt(3);
+
+      // 立方体在相机空间中的半宽/半高（3×3×3 立方体，间距 1.0）
+      const halfWidth = 3 / Math.sqrt(2);    // ≈ 2.12
+      const halfHeight = 6 / Math.sqrt(6);   // ≈ 2.45
+      const padding = 0.5;
+
+      // 竖屏时上下 UI 栏占比更大，需要额外留白
+      const uiFactor = aspect < 1 ? 1.3 : 1.05;
+
+      const dForHeight = (halfHeight * uiFactor + padding) / (sqrt3 * tanHalf);
+      const dForWidth  = (halfWidth + padding) / (sqrt3 * tanHalf * aspect);
+
+      const d = Math.max(dForHeight, dForWidth) * 1.08; // 8% 安全余量
+      return Math.max(7.5, d); // 桌面端不拉近，保持当前视角
+    }
+
+    function initThree() {
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.0;
+      renderer.setClearColor(0xffffff, 1);
+      document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+      scene = new THREE.Scene();
+
+      // 透视相机：等距位置 (d,d,d) 保证三面等大，动态距离适配各种屏幕
+      camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
+      const initD = calcCameraDistance(window.innerWidth / window.innerHeight);
+      camera.position.set(initD, initD, initD);
+      camera.lookAt(0, 0, 0);
+
+      // 灯光 — 白色背景下需要更明确的光照层次
+      scene.add(new THREE.AmbientLight(0xb0b4c0, 0.55));
+
+      const keyLight = new THREE.DirectionalLight(0xffffff, 0.9);
+      keyLight.position.set(6, 10, 5);
+      scene.add(keyLight);
+
+      const fillLight = new THREE.DirectionalLight(0x88aacc, 0.2);
+      fillLight.position.set(-5, 3, -3);
+      scene.add(fillLight);
+
+      const rimLight = new THREE.DirectionalLight(0xffd0a0, 0.1);
+      rimLight.position.set(0, -3, -6);
+      scene.add(rimLight);
+
+      raycaster = new THREE.Raycaster();
+      pointer = new THREE.Vector2();
+
+      window.addEventListener('resize', onResize);
+    }
+
+    // ============================================================
+    //  创建方块
+    // ============================================================
+    function createVoxels() {
+      for (let x = 0; x < GRID; x++) {
+        for (let y = 0; y < GRID; y++) {
+          for (let z = 0; z < GRID; z++) {
+            const geo = new THREE.BoxGeometry(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE);
+            const mat = new THREE.MeshPhongMaterial({
+              color: Appearance.CARVE.color,
+              transparent: true,
+              opacity: 1.0,
+              emissive: 0x000000,
+              emissiveIntensity: 0,
+              shininess: 60,
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set((x - 1) * SPACING, (y - 1) * SPACING, (z - 1) * SPACING);
+
+            // 边线 — 使用 Line2 + LineMaterial 支持真正的粗线渲染
+            const edgesGeo = new THREE.EdgesGeometry(geo);
+            const lineSegGeo = new LineSegmentsGeometry().setPositions(edgesGeo.attributes.position.array);
+            const edgeMat = new LineMaterial({
+              color: Appearance.CARVE.edgeColor,
+              linewidth: EDGE_LINEWIDTH,
+              transparent: true,
+              opacity: Appearance.CARVE.edgeOpacity,
+            });
+            edgeMat.resolution.set(window.innerWidth, window.innerHeight);
+            edgeMaterials.push(edgeMat);
+            const edges = new Line2(lineSegGeo, edgeMat);
+            edges.computeLineDistances();
+            mesh.add(edges);
+            scene.add(mesh);
+
+            const isOnVisibleFace = (x === 2 || y === 2 || z === 2);
+
+            voxels.push({
+              mesh,
+              edges,
+              bodyMat: mat,
+              edgeMat: edgeMat,
+              gridPos: { x, y, z },
+              isRemoved: false,
+              isOnVisibleFace,
+              // 入场动画
+              entering: false,
+              entryDelay: 0,
+              // 消除动画
+              removeAnimating: false,
+              removeAnimStart: 0,
+              // 庆祝动画
+              celebrating: false,
+              celebrateStart: 0,
+              // 动画目标
+              targetColor: new THREE.Color(Appearance.CARVE.color),
+              targetOpacity: 1.0,
+              targetEmissive: new THREE.Color(0x000000),
+              targetEmissiveIntensity: 0,
+              targetEdgeColor: new THREE.Color(Appearance.CARVE.edgeColor),
+              targetEdgeOpacity: Appearance.CARVE.edgeOpacity,
+              targetScale: 1.0,
+              currentScale: 1.0,
+            });
+          }
+        }
+      }
+
+      // 计算可见面方块索引（朝向相机的 3 个面）
+      visibleIndices = voxels
+        .map((v, i) => ({ v, i }))
+        .filter(({ v }) => v.isOnVisibleFace)
+        .map(({ i }) => i);
+    }
+
+    // 设置方块动画目标
+    function setVoxelTarget(v, stateName) {
+      const s = Appearance[stateName];
+      v.targetColor.setHex(s.color);
+      v.targetOpacity = s.opacity;
+      v.targetEmissive.setHex(s.emissive);
+      v.targetEmissiveIntensity = s.emissiveIntensity;
+      v.targetEdgeColor.setHex(s.edgeColor);
+      v.targetEdgeOpacity = s.edgeOpacity;
+      v.targetScale = s.scale;
+
+      // 恢复可见
+      if (s.scale > 0.1) {
+        v.mesh.visible = true;
+      }
+    }
+
+    function setAllVoxels(stateName) {
+      voxels.forEach(v => setVoxelTarget(v, stateName));
+    }
+
+    // 每帧动画插值
+    function animateVoxels() {
+      const lerp = 0.16;
+      const now = performance.now();
+
+      voxels.forEach(v => {
+        // === 入场动画延迟 ===
+        if (v.entering) {
+          const elapsed = now - entryStartTime;
+          if (elapsed < v.entryDelay) {
+            // 还没到这个方块的入场时间，保持隐藏
+            v.mesh.scale.setScalar(0);
+            v.bodyMat.opacity = 0;
+            v.edgeMat.opacity = 0;
+            // 颜色直接设为目标色（不 lerp）
+            v.bodyMat.color.copy(v.targetColor);
+            v.bodyMat.emissive.copy(v.targetEmissive);
+            v.bodyMat.emissiveIntensity = v.targetEmissiveIntensity;
+            v.edgeMat.color.copy(v.targetEdgeColor);
+            return;
+          } else {
+            v.entering = false;
+          }
+        }
+
+        // === 消除动画（两阶段：放大 → 缩小+旋转） ===
+        if (v.removeAnimating) {
+          const elapsed = now - v.removeAnimStart;
+          if (elapsed < 100) {
+            // Phase 1: 快速放大 1.0 → 1.15
+            const t = elapsed / 100;
+            v.currentScale = 1.0 + t * 0.15;
+          } else if (elapsed < 320) {
+            // Phase 2: 缩小 + 旋转 1.15 → 0
+            const t = (elapsed - 100) / 220;
+            v.currentScale = 1.15 * (1 - t);
+            v.mesh.rotation.x = t * 0.4;
+            v.mesh.rotation.y = t * 0.25;
+          } else {
+            v.removeAnimating = false;
+            v.currentScale = 0;
+            v.mesh.visible = false;
+            v.mesh.rotation.set(0, 0, 0);
+            return;
+          }
+          v.mesh.scale.setScalar(v.currentScale);
+          // 透明度仍 lerp 到 0
+          v.bodyMat.opacity = THREE.MathUtils.lerp(v.bodyMat.opacity, 0, lerp);
+          v.edgeMat.opacity = THREE.MathUtils.lerp(v.edgeMat.opacity, 0, lerp);
+          return;
+        }
+
+        // === 正常 lerp ===
+        v.bodyMat.color.lerp(v.targetColor, lerp);
+        v.bodyMat.opacity = THREE.MathUtils.lerp(v.bodyMat.opacity, v.targetOpacity, lerp);
+        v.bodyMat.emissive.lerp(v.targetEmissive, lerp);
+        v.bodyMat.emissiveIntensity = THREE.MathUtils.lerp(v.bodyMat.emissiveIntensity, v.targetEmissiveIntensity, lerp);
+        v.edgeMat.color.lerp(v.targetEdgeColor, lerp);
+        v.edgeMat.opacity = THREE.MathUtils.lerp(v.edgeMat.opacity, v.targetEdgeOpacity, lerp);
+        v.currentScale = THREE.MathUtils.lerp(v.currentScale, v.targetScale, lerp);
+        v.mesh.scale.setScalar(v.currentScale);
+
+        // 缩到很小后隐藏
+        if (v.targetScale < 0.1 && v.currentScale < 0.05) {
+          v.mesh.visible = false;
+        }
+
+        // === 庆祝弹跳 ===
+        if (v.celebrating) {
+          const celapsed = now - v.celebrateStart;
+          if (celapsed < 600) {
+            const t = celapsed / 600;
+            const bounce = Math.sin(t * Math.PI) * 0.12;
+            v.mesh.scale.setScalar(v.currentScale + bounce);
+          } else {
+            v.celebrating = false;
+          }
+        }
+      });
+    }
+
+    // ============================================================
+    //  游戏逻辑
+    // ============================================================
+    function trackedTimeout(fn, delay) {
+      const id = setTimeout(() => {
+        pendingTimeouts = pendingTimeouts.filter(t => t !== id);
+        fn();
+      }, delay);
+      pendingTimeouts.push(id);
+      return id;
+    }
+
+    function clearPendingTimeouts() {
+      pendingTimeouts.forEach(id => clearTimeout(id));
+      pendingTimeouts = [];
+    }
+
+    // 阶段文字渐变切换（先淡出 → 换文字+颜色 → 淡入）
+    function setPhaseText(text, color) {
+      const el = document.getElementById('phase-text');
+      el.style.opacity = '0';
+      setTimeout(() => {
+        el.textContent = text;
+        el.style.color = color || '';
+        el.style.opacity = '';
+      }, 250);
+    }
+
+    // 关卡升级时脉冲动画
+    function pulseStatBlock() {
+      const el = document.querySelector('#top-bar .stat-block');
+      el.classList.remove('pulse');
+      void el.offsetWidth;  // 强制 reflow 重置动画
+      el.classList.add('pulse');
+    }
+
+    function getNumMissing(lvl) {
+      return Math.min(lvl + 1, 9);
+    }
+
+    function getShowDuration(lvl) {
+      return Math.max(2500, 5000 - lvl * 250);
+    }
+
+    function getCarveDuration(lvl) {
+      return Math.max(15000, 30000 - lvl * 1000);
+    }
+
+    function startGame() {
+      clearPendingTimeouts();
+      resultProcessed = false;
+      isTransitioning = false;
+      level = 1;
+      bestLevel = Math.max(bestLevel, loadBest());
+      hideStartScreen();
+      hideGameOverScreen();
+      startLevel();
+    }
+
+    function startLevel() {
+      clearPendingTimeouts();
+      resultProcessed = false;
+      isTransitioning = false;
+      targetMissing = [];
+      playerRemoved = [];
+      removeSoundStep = 0;
+      lastTickSecond = -1;
+
+      // 清除 UI 状态
+      document.getElementById('timer-bar-fill').classList.remove('urgent');
+      document.getElementById('progress-display').classList.remove('show', 'complete');
+
+      const numMissing = getNumMissing(level);
+      showDuration = getShowDuration(level);
+      carveDuration = getCarveDuration(level);
+
+      // 随机选取目标缺失方块（仅从可见面方块中选取）
+      const shuffled = [...visibleIndices];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      targetMissing = shuffled.slice(0, numMissing);
+
+      // 显示残缺立方体 + 入场动画
+      entryStartTime = performance.now();
+      voxels.forEach((v, i) => {
+        v.removeAnimating = false;
+        v.celebrating = false;
+        v.mesh.rotation.set(0, 0, 0);
+
+        if (targetMissing.includes(i)) {
+          v.isRemoved = false;
+          setVoxelTarget(v, 'REMOVED');
+          v.mesh.visible = false;
+          v.entering = false;
+        } else {
+          v.isRemoved = false;
+          setVoxelTarget(v, 'TARGET');
+          // 入场动画：随机延迟飞入
+          v.entering = true;
+          v.entryDelay = Math.random() * 400;
+          v.currentScale = 0;
+          v.mesh.scale.setScalar(0);
+          v.bodyMat.opacity = 0;
+          v.edgeMat.opacity = 0;
+        }
+      });
+
+      gameState = GameState.SHOWING;
+      showStartTime = performance.now();
+
+      showMessage('记住这个形状！', `Level ${level} · 缺失 ${numMissing} 块`, 'highlight');
+      setPhaseText('记忆阶段', 'var(--gold)');
+      pulseStatBlock();
+      document.getElementById('reset-btn').disabled = true;
+      document.getElementById('confirm-btn').disabled = true;
+      updateTimerBar(1, 'showing');
+      updateUI();
+      playSound('show');
+    }
+
+    function transitionToCarving() {
+      if (gameState !== GameState.SHOWING) return;
+      if (isTransitioning) return;
+      isTransitioning = true;
+      hideMessage();
+
+      // Phase 1: 残缺立方体下沉淡出
+      voxels.forEach((v) => {
+        if (!v.isRemoved) {
+          v.targetOpacity = 0;
+          v.targetEdgeOpacity = 0;
+          v.targetScale = 0.5;
+        }
+      });
+
+      setPhaseText('准备雕刻...', 'var(--text-dim)');
+
+      // Phase 2: 400ms 后显示完整立方体（入场动画）
+      trackedTimeout(() => {
+        entryStartTime = performance.now();
+        voxels.forEach((v) => {
+          v.isRemoved = false;
+          v.removeAnimating = false;
+          v.celebrating = false;
+          v.mesh.visible = true;
+          v.mesh.rotation.set(0, 0, 0);
+          setVoxelTarget(v, 'CARVE');
+          // 入场动画
+          v.entering = true;
+          v.entryDelay = Math.random() * 300;
+          v.currentScale = 0;
+          v.mesh.scale.setScalar(0);
+          v.bodyMat.opacity = 0;
+          v.edgeMat.opacity = 0;
+        });
+
+        // Phase 3: 500ms 后启用雕刻控制
+        trackedTimeout(() => {
+          isTransitioning = false;
+          gameState = GameState.CARVING;
+          carveStartTime = performance.now();
+          lastTickSecond = -1;
+
+          showMessage('开始雕刻！', '点击方块消除，使其与目标形状一致', 'info');
+          trackedTimeout(() => hideMessage(), 1800);
+
+          setPhaseText('雕刻阶段', 'var(--accent)');
+          document.getElementById('reset-btn').disabled = false;
+          document.getElementById('confirm-btn').disabled = false;
+          updateTimerBar(1, 'carve');
+          updateProgress();
+          playSound('carve');
+        }, 500);
+      }, 400);
+    }
+
+    function handleVoxelClick(index) {
+      if (gameState !== GameState.CARVING) return;
+      const v = voxels[index];
+      if (v.isRemoved) return;
+
+      hoveredIndex = -1;  // 清除 hover
+      v.isRemoved = true;
+      playerRemoved.push(index);
+
+      // 启动消除动画（两阶段：放大 → 缩小+旋转）
+      v.removeAnimating = true;
+      v.removeAnimStart = performance.now();
+      // 透明度目标设为 0，scale 由 removeAnimating 接管
+      v.targetOpacity = 0;
+      v.targetEdgeOpacity = 0;
+
+      // 渐进音效：五声音阶（C→D→E→G→A→C→D→E→G），每点一块跳一个音
+      const freq = PENTATONIC[Math.min(removeSoundStep, PENTATONIC.length - 1)];
+      tone(freq, 0.12, 'sine', 0.15);
+      removeSoundStep++;
+
+      // 更新进度提示
+      updateProgress();
+    }
+
+    function resetCarving() {
+      if (gameState !== GameState.CARVING) return;
+      clearHover();
+      playerRemoved = [];
+      removeSoundStep = 0;
+      voxels.forEach(v => {
+        v.isRemoved = false;
+        v.removeAnimating = false;
+        v.celebrating = false;
+        v.mesh.visible = true;
+        v.mesh.rotation.set(0, 0, 0);
+        setVoxelTarget(v, 'CARVE');
+      });
+      updateProgress();
+      playSound('reset');
+    }
+
+    function confirmCarving() {
+      if (gameState !== GameState.CARVING) return;
+      if (resultProcessed) return;
+      resultProcessed = true;
+      clearHover();
+      gameState = GameState.RESULT;
+
+      // 清除 UI 状态
+      document.getElementById('timer-bar-fill').classList.remove('urgent');
+      document.getElementById('progress-display').classList.remove('show', 'complete');
+
+      // 计算结果
+      const correct = playerRemoved.filter(i => targetMissing.includes(i));
+      const wrong = playerRemoved.filter(i => !targetMissing.includes(i));
+      const missed = targetMissing.filter(i => !playerRemoved.includes(i));
+
+      const isPerfect = wrong.length === 0 && missed.length === 0;
+
+      // 显示结果：颜色编码
+      voxels.forEach((v, i) => {
+        v.removeAnimating = false;
+        v.mesh.visible = true;
+        v.mesh.rotation.set(0, 0, 0);
+        if (wrong.includes(i)) {
+          setVoxelTarget(v, 'WRONG');
+        } else if (missed.includes(i)) {
+          setVoxelTarget(v, 'MISSED');
+        } else if (correct.includes(i)) {
+          // 正确消除的方块保持隐藏
+          setVoxelTarget(v, 'REMOVED');
+          trackedTimeout(() => { v.mesh.visible = false; }, 50);
+        } else {
+          // 正确保留的方块
+          setVoxelTarget(v, 'CORRECT');
+        }
+      });
+
+      document.getElementById('reset-btn').disabled = true;
+      document.getElementById('confirm-btn').disabled = true;
+      updateTimerBar(0, 'result');
+
+      if (isPerfect) {
+        // === 完美通关庆祝效果 ===
+        // 1. 光环波纹
+        const ring = document.getElementById('celebration-ring');
+        ring.classList.remove('active');
+        void ring.offsetWidth;  // 强制 reflow 重置动画
+        ring.classList.add('active');
+
+        // 2. 立方体弹跳
+        voxels.forEach(v => {
+          if (v.mesh.visible) {
+            v.celebrating = true;
+            v.celebrateStart = performance.now();
+          }
+        });
+
+        showMessage(`Level ${level} 完成！`, '准备下一关...', 'success');
+        setPhaseText('关卡完成', 'var(--green)');
+        playSound('levelup');
+        bestLevel = Math.max(bestLevel, level);
+        saveBest(bestLevel);
+
+        trackedTimeout(() => {
+          level++;
+          startLevel();
+        }, 2400);
+      } else {
+        const detail = [];
+        if (wrong.length > 0) detail.push(`错误 ${wrong.length}`);
+        if (missed.length > 0) detail.push(`遗漏 ${missed.length}`);
+        showMessage('失败！', detail.join(' · '), 'fail');
+        setPhaseText('游戏结束', 'var(--red)');
+        playSound('gameover');
+
+        trackedTimeout(() => showGameOverScreen(), 2800);
+      }
+
+      updateUI();
+    }
+
+    function showGameOverScreen() {
+      clearPendingTimeouts();
+      gameState = GameState.GAME_OVER;
+      resultProcessed = false;
+      const isNewRecord = level > bestLevel;
+      if (isNewRecord) {
+        bestLevel = level;
+        saveBest(bestLevel);
+      }
+
+      document.getElementById('final-level').textContent = level;
+      document.getElementById('final-best').textContent = bestLevel;
+      document.getElementById('new-record').style.display = isNewRecord ? 'block' : 'none';
+      document.getElementById('gameover-screen').classList.remove('hidden');
+      updateUI();
+    }
+
+    // ============================================================
+    //  UI
+    // ============================================================
+    function updateUI() {
+      document.getElementById('level-value').textContent = level;
+      document.getElementById('best-value').textContent = Math.max(bestLevel, loadBest());
+    }
+
+    function showMessage(main, sub, type) {
+      const el = document.getElementById('center-message');
+      el.querySelector('.msg-main').textContent = main;
+      el.querySelector('.msg-sub').textContent = sub || '';
+      el.className = type || 'info';
+      el.classList.add('show');
+    }
+
+    function hideMessage() {
+      document.getElementById('center-message').classList.remove('show');
+    }
+
+    function updateProgress() {
+      const el = document.getElementById('progress-display');
+      if (gameState !== GameState.CARVING) {
+        el.classList.remove('show', 'complete');
+        return;
+      }
+      const removed = playerRemoved.length;
+      const target = targetMissing.length;
+      el.innerHTML = `已消除 <span class="progress-current">${removed}</span> / ${target}`;
+      el.classList.add('show');
+      if (removed === target) {
+        el.classList.add('complete');
+      } else {
+        el.classList.remove('complete');
+      }
+    }
+
+    function updateTimerBar(progress, type) {
+      const fill = document.getElementById('timer-bar-fill');
+      const text = document.getElementById('timer-text');
+
+      fill.style.width = (progress * 100) + '%';
+
+      if (type === 'showing') {
+        fill.style.backgroundColor = '#d4a017';
+        text.textContent = '记忆中';
+      } else if (type === 'carve') {
+        if (progress > 0.5) {
+          fill.style.backgroundColor = '#1ea672';
+        } else if (progress > 0.25) {
+          fill.style.backgroundColor = '#d4a017';
+        } else {
+          fill.style.backgroundColor = '#e0453b';
+        }
+        text.textContent = (progress * carveDuration / 1000).toFixed(1) + 's';
+      } else {
+        fill.style.width = '0%';
+        text.textContent = '';
+      }
+    }
+
+    function hideStartScreen() {
+      document.getElementById('start-screen').classList.add('hidden');
+    }
+
+    function showStartScreen() {
+      document.getElementById('start-screen').classList.remove('hidden');
+      document.getElementById('start-best').textContent = loadBest();
+    }
+
+    function hideGameOverScreen() {
+      document.getElementById('gameover-screen').classList.add('hidden');
+    }
+
+    // ============================================================
+    //  音效
+    // ============================================================
+    // 五声音阶频率表（C 大调五声）：C4→D4→E4→G4→A4→C5→D5→E5→G5
+    // 天然和谐，永远不会刺耳，第6次回到高八度C有"升级感"
+    const PENTATONIC = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25, 783.99];
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function tone(freq, dur, type = 'sine', vol = 0.2) {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.type = type;
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+      osc.start();
+      osc.stop(audioCtx.currentTime + dur);
+    }
+
+    function playSound(type) {
+      if (!audioCtx) return;
+      switch (type) {
+        case 'remove':
+          tone(300, 0.08, 'square', 0.12);
+          break;
+        case 'reset':
+          tone(400, 0.1, 'sine', 0.12);
+          setTimeout(() => tone(500, 0.1, 'sine', 0.1), 60);
+          break;
+        case 'show':
+          tone(440, 0.1, 'sine', 0.12);
+          setTimeout(() => tone(660, 0.1, 'sine', 0.1), 80);
+          break;
+        case 'carve':
+          tone(587, 0.12, 'sine', 0.12);
+          break;
+        case 'levelup':
+          tone(523, 0.1, 'sine', 0.2);
+          setTimeout(() => tone(659, 0.1, 'sine', 0.2), 100);
+          setTimeout(() => tone(784, 0.1, 'sine', 0.2), 200);
+          setTimeout(() => tone(1047, 0.25, 'sine', 0.2), 300);
+          break;
+        case 'gameover':
+          tone(400, 0.2, 'sawtooth', 0.16);
+          setTimeout(() => tone(300, 0.2, 'sawtooth', 0.14), 150);
+          setTimeout(() => tone(200, 0.2, 'sawtooth', 0.12), 300);
+          setTimeout(() => tone(120, 0.5, 'sawtooth', 0.1), 450);
+          break;
+      }
+    }
+
+    // ============================================================
+    //  存档
+    // ============================================================
+    function loadBest() {
+      return parseInt(localStorage.getItem('memoryCube3DBest') || '0');
+    }
+
+    function saveBest(score) {
+      localStorage.setItem('memoryCube3DBest', score.toString());
+    }
+
+    // ============================================================
+    //  交互
+    // ============================================================
+    let pointerDownPos = null;
+    let isDragging = false;
+    const DRAG_THRESHOLD = 6;
+
+    // === Hover 高亮 ===
+    function updateHover(e) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(pointer, camera);
+      const clickable = voxels.filter(v => !v.isRemoved).map(v => v.mesh);
+      const hits = raycaster.intersectObjects(clickable, false);
+
+      let newHovered = -1;
+      if (hits.length > 0) {
+        newHovered = voxels.findIndex(v => v.mesh === hits[0].object);
+      }
+
+      if (newHovered !== hoveredIndex) {
+        clearHover();
+        if (newHovered !== -1) {
+          setVoxelTarget(voxels[newHovered], 'HOVER');
+          renderer.domElement.style.cursor = 'pointer';
+        }
+        hoveredIndex = newHovered;
+      }
+    }
+
+    function clearHover() {
+      if (hoveredIndex !== -1) {
+        const v = voxels[hoveredIndex];
+        if (!v.isRemoved && gameState === GameState.CARVING) {
+          setVoxelTarget(v, 'CARVE');
+        }
+        hoveredIndex = -1;
+      }
+      renderer.domElement.style.cursor = 'default';
+    }
+
+    function onPointerDown(e) {
+      pointerDownPos = { x: e.clientX, y: e.clientY };
+      isDragging = false;
+      // 雕刻阶段：触摸按下时立即显示 hover（移动端预览）
+      if (gameState === GameState.CARVING) {
+        updateHover(e);
+      }
+    }
+
+    function onPointerMove(e) {
+      if (pointerDownPos) {
+        const dx = e.clientX - pointerDownPos.x;
+        const dy = e.clientY - pointerDownPos.y;
+        if (Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD) {
+          isDragging = true;
+        }
+      }
+
+      // 雕刻阶段且未拖拽时更新 hover（鼠标移动 or 触摸未超出阈值）
+      if (gameState === GameState.CARVING && !isDragging) {
+        updateHover(e);
+      } else if (hoveredIndex !== -1 && (isDragging || gameState !== GameState.CARVING)) {
+        clearHover();
+      }
+    }
+
+    function onPointerUp(e) {
+      if (pointerDownPos && !isDragging && gameState === GameState.CARVING) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+        raycaster.setFromCamera(pointer, camera);
+        const clickable = voxels.filter(v => !v.isRemoved).map(v => v.mesh);
+        const hits = raycaster.intersectObjects(clickable, false);
+
+        if (hits.length > 0) {
+          const idx = voxels.findIndex(v => v.mesh === hits[0].object);
+          if (idx !== -1) handleVoxelClick(idx);
+        }
+      }
+      pointerDownPos = null;
+      isDragging = false;
+    }
+
+    function onResize() {
+      const aspect = window.innerWidth / window.innerHeight;
+      camera.aspect = aspect;
+      const d = calcCameraDistance(aspect);
+      camera.position.set(d, d, d);
+      camera.lookAt(0, 0, 0);
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      // 更新 LineMaterial 分辨率，保证粗线在 resize 后宽度正确
+      edgeMaterials.forEach(m => m.resolution.set(window.innerWidth, window.innerHeight));
+    }
+
+    // ============================================================
+    //  动画循环
+    // ============================================================
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // SHOW 阶段倒计时（过渡中不执行）
+      if (gameState === GameState.SHOWING && !isTransitioning) {
+        const elapsed = performance.now() - showStartTime;
+        const progress = Math.min(elapsed / showDuration, 1);
+        updateTimerBar(1 - progress, 'showing');
+        if (elapsed >= showDuration) {
+          transitionToCarving();
+        }
+      } else if (gameState === GameState.CARVING) {
+        // CARVE 阶段倒计时
+        const elapsed = performance.now() - carveStartTime;
+        const progress = Math.min(elapsed / carveDuration, 1);
+        updateTimerBar(1 - progress, 'carve');
+
+        // 最后 5 秒紧迫感
+        const remaining = carveDuration - elapsed;
+        const fill = document.getElementById('timer-bar-fill');
+        if (remaining < 5000 && remaining > 0) {
+          fill.classList.add('urgent');
+          const currentSec = Math.ceil(remaining / 1000);
+          if (currentSec !== lastTickSecond && currentSec <= 5) {
+            lastTickSecond = currentSec;
+            tone(880, 0.04, 'sine', 0.06);
+          }
+        } else {
+          fill.classList.remove('urgent');
+        }
+
+        if (elapsed >= carveDuration) {
+          // 超时，自动确认（判失败）
+          confirmCarving();
+        }
+      }
+
+      animateVoxels();
+      renderer.render(scene, camera);
+    }
+
+    // ============================================================
+    //  键盘快捷键（桌面端）
+    // ============================================================
+    function onKeyDown(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      switch (e.key) {
+        case 'Enter':
+          if (gameState === GameState.CARVING) {
+            e.preventDefault();
+            confirmCarving();
+          }
+          break;
+        case 'r':
+        case 'R':
+          if (gameState === GameState.CARVING) {
+            e.preventDefault();
+            resetCarving();
+          }
+          break;
+        case ' ':
+          if (gameState === GameState.MENU) {
+            e.preventDefault();
+            initAudio();
+            startGame();
+          } else if (gameState === GameState.GAME_OVER) {
+            e.preventDefault();
+            hideGameOverScreen();
+            startGame();
+          }
+          break;
+      }
+    }
+
+    // ============================================================
+    //  初始化
+    // ============================================================
+    function init() {
+      bestLevel = loadBest();
+      isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+      initThree();
+      createVoxels();
+
+      renderer.domElement.addEventListener('pointerdown', onPointerDown);
+      renderer.domElement.addEventListener('pointermove', onPointerMove);
+      renderer.domElement.addEventListener('pointerup', onPointerUp);
+      renderer.domElement.addEventListener('pointerleave', () => {
+        if (gameState === GameState.CARVING) clearHover();
+      });
+
+      // 键盘快捷键（桌面端）
+      window.addEventListener('keydown', onKeyDown);
+
+      document.getElementById('start-btn').addEventListener('click', () => {
+        initAudio();
+        startGame();
+      });
+
+      document.getElementById('restart-btn').addEventListener('click', () => {
+        hideGameOverScreen();
+        startGame();
+      });
+
+      document.getElementById('confirm-btn').addEventListener('click', confirmCarving);
+      document.getElementById('reset-btn').addEventListener('click', resetCarving);
+
+      showStartScreen();
+      updateUI();
+      animate();
+    }
+
+    init();
+  </script>
+</body>
+</html>
