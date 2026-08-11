@@ -18,8 +18,8 @@
       --bg-glass: rgba(255, 255, 255, 0.72);
       --text: #1a1a2e;
       --text-dim: #8a8a9e;
-      --accent: #2d7dd2;
-      --accent-hover: #1a6cbf;
+      --accent: #5b9ef5;
+      --accent-hover: #4a8ed9;
       --green: #1ea672;
       --red: #e0453b;
       --orange: #f08c2e;
@@ -886,17 +886,17 @@
     const EDGE_LINEWIDTH = 3;  // 边线粗细（像素）
     const Appearance = {
       CARVE: {
-        color: 0x3a8fd0, emissive: 0x000000, emissiveIntensity: 0,
+        color: 0x5b9ef5, emissive: 0x000000, emissiveIntensity: 0,
         edgeColor: 0xffffff, edgeOpacity: 0.85,
         opacity: 1.0, scale: 1.0
       },
       TARGET: {
-        color: 0x2d7dd2, emissive: 0x1a5aa8, emissiveIntensity: 0.25,
-        edgeColor: 0xffffff, edgeOpacity: 0.8,
+        color: 0x5b9ef5, emissive: 0x000000, emissiveIntensity: 0,
+        edgeColor: 0xffffff, edgeOpacity: 0.85,
         opacity: 1.0, scale: 1.0
       },
       REMOVED: {
-        color: 0x3a8fd0, emissive: 0x000000, emissiveIntensity: 0,
+        color: 0x5b9ef5, emissive: 0x000000, emissiveIntensity: 0,
         edgeColor: 0xffffff, edgeOpacity: 0,
         opacity: 0, scale: 0
       },
@@ -916,7 +916,7 @@
         opacity: 0.9, scale: 1.0
       },
       HOVER: {
-        color: 0x6ab8ec, emissive: 0x2d7dd2, emissiveIntensity: 0.15,
+        color: 0x8bc7ff, emissive: 0x5b9ef5, emissiveIntensity: 0.15,
         edgeColor: 0xffffff, edgeOpacity: 1.0,
         opacity: 1.0, scale: 1.06
       }
@@ -996,20 +996,13 @@
       camera.position.set(initD, initD, initD);
       camera.lookAt(0, 0, 0);
 
-      // 灯光 — 白色背景下需要更明确的光照层次
-      scene.add(new THREE.AmbientLight(0xb0b4c0, 0.55));
+      // 灯光 — 极低环境光 + 不对称主光，三面明暗分明
+      // 主光偏 X 侧：+Y≈80%、+X≈56%、+Z≈24%，三面形成明显梯度
+      scene.add(new THREE.AmbientLight(0xb0b4c0, 0.12));
 
-      const keyLight = new THREE.DirectionalLight(0xffffff, 0.9);
-      keyLight.position.set(6, 10, 5);
+      const keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
+      keyLight.position.set(7, 10, 3);
       scene.add(keyLight);
-
-      const fillLight = new THREE.DirectionalLight(0x88aacc, 0.2);
-      fillLight.position.set(-5, 3, -3);
-      scene.add(fillLight);
-
-      const rimLight = new THREE.DirectionalLight(0xffd0a0, 0.1);
-      rimLight.position.set(0, -3, -6);
-      scene.add(rimLight);
 
       raycaster = new THREE.Raycaster();
       pointer = new THREE.Vector2();
@@ -1030,13 +1023,12 @@
       for (let x = 0; x < GRID; x++) {
         for (let y = 0; y < GRID; y++) {
           for (let z = 0; z < GRID; z++) {
-            const mat = new THREE.MeshPhongMaterial({
+            const mat = new THREE.MeshLambertMaterial({
               color: Appearance.CARVE.color,
               transparent: true,
               opacity: 1.0,
               emissive: 0x000000,
               emissiveIntensity: 0,
-              shininess: 60,
             });
             const mesh = new THREE.Mesh(sharedBoxGeo, mat);
             mesh.position.set((x - 1) * SPACING, (y - 1) * SPACING, (z - 1) * SPACING);
@@ -1241,9 +1233,9 @@
     }
 
     function getShowDuration(lvl) {
-      if (lvl <= 10) return 3000;
-      // 通关后继续递减：每级降 0.1s，最低 2.5s（Level 15 达到下限）
-      return Math.max(2500, 3000 - (lvl - 10) * 100);
+      if (lvl <= 10) return 3500;
+      // 通关后继续递减：每级降 0.1s，最低 3s（Level 15 达到下限）
+      return Math.max(3000, 3500 - (lvl - 10) * 100);
     }
 
     function getCarveDuration(lvl) {
@@ -1913,7 +1905,7 @@
     resizeConfettiCanvas();
     window.addEventListener('resize', resizeConfettiCanvas);
 
-    const CONFETTI_COLORS = ['#e0453b', '#f08c2e', '#d4a017', '#1ea672', '#2d7dd2', '#9b59b6', '#e91e63', '#00bcd4'];
+    const CONFETTI_COLORS = ['#e0453b', '#f08c2e', '#d4a017', '#1ea672', '#5b9ef5', '#9b59b6', '#e91e63', '#00bcd4'];
 
     function launchConfetti() {
       const count = 120;
