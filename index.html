@@ -72,6 +72,35 @@
       padding: 16px 24px;
     }
 
+    /* === 测试按钮（发布版本移除） ===
+    #test-skip-btn {
+      position: absolute;
+      top: 60px;
+      right: 16px;
+      z-index: 50;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #888;
+      background: rgba(255,255,255,0.6);
+      border: 1px dashed #ccc;
+      border-radius: 6px;
+      cursor: pointer;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s, background 0.2s;
+    }
+    #test-skip-btn.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #test-skip-btn:hover {
+      background: rgba(255,255,255,0.9);
+      color: #555;
+      border-color: #aaa;
+    }
+    === 测试按钮 END === */
+
     .stat-block {
       display: flex;
       align-items: center;
@@ -314,7 +343,8 @@
     #gameover-screen:not(.hidden) .score-item:nth-child(1) { animation: fadeInUp 0.5s var(--ease-out) 0.3s backwards; }
     #gameover-screen:not(.hidden) .score-item:nth-child(2) { animation: fadeInUp 0.5s var(--ease-out) 0.45s backwards; }
     #gameover-screen:not(.hidden) .btn-start              { animation: fadeInUp 0.5s var(--ease-out) 0.7s backwards; }
-    #gameover-screen:not(.hidden) .btn-share              { animation: fadeInUp 0.5s var(--ease-out) 0.85s backwards; }
+    #gameover-screen:not(.hidden) #continue-btn           { animation: fadeInUp 0.5s var(--ease-out) 0.85s backwards; margin-top: 14px; }
+    #gameover-screen:not(.hidden) .btn-share              { animation: fadeInUp 0.5s var(--ease-out) 1.0s backwards; }
 
     .game-title {
       font-size: clamp(34px, 6vw, 56px);
@@ -389,6 +419,16 @@
 
     .btn-start:active {
       transform: translateY(0) scale(0.97);
+    }
+
+    /* 继续挑战按钮 — 绿色，区别于再来一局，鼓励继续 */
+    #continue-btn {
+      background: var(--green) !important;
+      box-shadow: 0 4px 20px rgba(30, 166, 114, 0.25) !important;
+    }
+    #continue-btn:hover {
+      background: #178a5e !important;
+      box-shadow: 0 6px 28px rgba(30, 166, 114, 0.35) !important;
     }
 
     .best-display {
@@ -589,6 +629,14 @@
       flex-shrink: 0;
     }
 
+    /* === 彩色碎片 === */
+    #confetti-canvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 150;
+    }
+
     /* === 庆祝光环 === */
     #celebration-ring {
       position: fixed;
@@ -695,6 +743,7 @@
 </head>
 <body>
   <div id="canvas-container"></div>
+  <canvas id="confetti-canvas"></canvas>
   <div id="celebration-ring"></div>
   <div id="toast"></div>
 
@@ -709,6 +758,10 @@
         <span class="stat-value" id="best-value">0</span>
       </div>
     </div>
+
+    <!-- 测试按钮（发布版本移除）
+    <button id="test-skip-btn">测试通关</button>
+    -->
 
     <div id="center-message">
       <div class="msg-main"></div>
@@ -752,7 +805,7 @@
       </div>
       <div class="instruction-row">
         <div class="instruction-num">5</div>
-        <span>每关只有一次机会，失败即结束</span>
+        <span>每关只有一次机会，失败即结束。通过 Level 10 通关</span>
       </div>
     </div>
     <button class="btn-start" id="start-btn">开始游戏</button>
@@ -787,6 +840,7 @@
       </div>
     </div>
     <button class="btn-start" id="restart-btn">再来一局</button>
+    <button class="btn-start" id="continue-btn" style="display:none">继续挑战</button>
     <button class="btn-share" id="gameover-share-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
@@ -818,6 +872,7 @@
     const GRID = 3;
     const VOXEL_SIZE = 0.998;  // 几乎无间隙
     const SPACING = 1.0;
+    const CLEAR_LEVEL = 10;  // 通关里程碑（通关后可继续挑战）
 
     const GameState = {
       MENU: 'menu',
@@ -889,6 +944,7 @@
     let isTransitioning = false; // 阶段过渡中标志
     let lastTickSecond = -1;     // 上次播放 tick 音的秒数
     let isMobile = false;        // 是否移动端
+    let hasCleared = false;      // 是否已通关过 Level 10（避免重复显示通关画面）
 
     // ============================================================
     //  Three.js
@@ -1185,7 +1241,9 @@
     }
 
     function getShowDuration(lvl) {
-      return Math.max(2500, 5000 - lvl * 250);
+      if (lvl <= 10) return 3000;
+      // 通关后继续递减：每级降 0.1s，最低 2.5s（Level 15 达到下限）
+      return Math.max(2500, 3000 - (lvl - 10) * 100);
     }
 
     function getCarveDuration(lvl) {
@@ -1196,6 +1254,7 @@
       clearPendingTimeouts();
       resultProcessed = false;
       isTransitioning = false;
+      hasCleared = false;
       level = 1;
       bestLevel = Math.max(bestLevel, loadBest());
       hideStartScreen();
@@ -1255,6 +1314,7 @@
 
       gameState = GameState.SHOWING;
       showStartTime = performance.now();
+      // dom.testSkipBtn.classList.add('visible');
 
       showMessage('记住这个形状！', `Level ${level} · 缺失 ${numMissing} 块`, 'highlight');
       setPhaseText('记忆阶段', 'var(--gold)');
@@ -1281,7 +1341,7 @@
         }
       });
 
-      setPhaseText('准备雕刻...', 'var(--text-dim)');
+      setPhaseText('准备还原...', 'var(--text-dim)');
 
       // Phase 2: 移动端更快的过渡
       const fadeOutDelay = isMobile ? 320 : 400;
@@ -1305,17 +1365,17 @@
           v.edgeMat.opacity = 0;
         });
 
-        // Phase 3: 启用雕刻控制
+        // Phase 3: 启用还原控制
         trackedTimeout(() => {
           isTransitioning = false;
           gameState = GameState.CARVING;
           carveStartTime = performance.now();
           lastTickSecond = -1;
 
-          showMessage('开始雕刻！', '点击方块消除，使其与目标形状一致', 'info');
+          showMessage('开始还原！', '点击方块消除，使其与目标形状一致', 'info');
           trackedTimeout(() => hideMessage(), isMobile ? 1200 : 1800);
 
-          setPhaseText('雕刻阶段', 'var(--accent)');
+          setPhaseText('还原阶段', 'var(--accent)');
           dom.resetBtn.disabled = false;
           dom.confirmBtn.disabled = false;
           updateTimerBar(1, 'carve');
@@ -1367,12 +1427,31 @@
       playSound('reset');
     }
 
+    // === 测试通关（发布版本移除） ===
+    /* function testPassLevel() {
+      if (gameState === GameState.SHOWING) {
+        // 先跳过记忆阶段，等过渡完成后自动通关
+        transitionToCarving();
+        const fadeOut = isMobile ? 320 : 400;
+        const flyIn = isMobile ? 400 : 500;
+        trackedTimeout(() => {
+          playerRemoved = [...targetMissing];
+          confirmCarving();
+        }, fadeOut + flyIn + 150);
+      } else if (gameState === GameState.CARVING) {
+        // 直接模拟完美消除
+        playerRemoved = [...targetMissing];
+        confirmCarving();
+      }
+    } */
+
     function confirmCarving() {
       if (gameState !== GameState.CARVING) return;
       if (resultProcessed) return;
       resultProcessed = true;
       clearHover();
       gameState = GameState.RESULT;
+      // dom.testSkipBtn.classList.remove('visible');
 
       // 清除 UI 状态
       dom.timerBarFill.classList.remove('urgent');
@@ -1429,10 +1508,20 @@
         bestLevel = Math.max(bestLevel, level);
         saveBest(bestLevel);
 
-        trackedTimeout(() => {
-          level++;
-          startLevel();
-        }, isMobile ? 2000 : 2400);
+        if (level >= CLEAR_LEVEL && !hasCleared) {
+          // 首次通关里程碑 — 显示通关画面
+          hasCleared = true;
+          trackedTimeout(() => {
+            playSound('victory');
+            launchConfetti();
+            showGameOverScreen(true);
+          }, isMobile ? 2000 : 2400);
+        } else {
+          trackedTimeout(() => {
+            level++;
+            startLevel();
+          }, isMobile ? 2000 : 2400);
+        }
       } else {
         const detail = [];
         if (wrong.length > 0) detail.push(`错误 ${wrong.length}`);
@@ -1447,21 +1536,32 @@
       updateUI();
     }
 
-    function showGameOverScreen() {
+    function showGameOverScreen(isVictory) {
       clearPendingTimeouts();
       gameState = GameState.GAME_OVER;
       resultProcessed = false;
+      // dom.testSkipBtn.classList.remove('visible');
       const isNewRecord = level > bestLevel;
       if (isNewRecord) {
         bestLevel = level;
         saveBest(bestLevel);
       }
 
+      // 通关后继续挑战失败 → 仍显示"恭喜通关"
+      const showVictory = isVictory || (hasCleared && !isVictory);
+      dom.gameoverTitle.textContent = showVictory ? '恭喜通关' : '游戏结束';
+      dom.gameoverTitle.style.color = showVictory ? 'var(--green)' : '';
       dom.finalLevel.textContent = level;
       dom.finalBest.textContent = bestLevel;
       dom.newRecord.style.display = isNewRecord ? 'block' : 'none';
+      dom.continueBtn.style.display = isVictory ? '' : 'none';
       dom.gameoverScreen.classList.remove('hidden');
       updateUI();
+
+      // 新纪录且超过 Level 10 → 彩色碎片庆祝
+      if (isNewRecord && level > CLEAR_LEVEL) {
+        launchConfetti();
+      }
     }
 
     // ============================================================
@@ -1527,6 +1627,7 @@
     function showStartScreen() {
       dom.startScreen.classList.remove('hidden');
       dom.startBest.textContent = loadBest();
+      // dom.testSkipBtn.classList.remove('visible');
     }
 
     function hideGameOverScreen() {
@@ -1585,10 +1686,19 @@
           setTimeout(() => tone(1047, 0.25, 'sine', 0.2), 300);
           break;
         case 'gameover':
-          tone(400, 0.2, 'sawtooth', 0.16);
-          setTimeout(() => tone(300, 0.2, 'sawtooth', 0.14), 150);
-          setTimeout(() => tone(200, 0.2, 'sawtooth', 0.12), 300);
-          setTimeout(() => tone(120, 0.5, 'sawtooth', 0.1), 450);
+          // 柔和下行小调 — 惋惜感
+          tone(440, 0.4, 'sine', 0.12);
+          setTimeout(() => tone(392, 0.4, 'sine', 0.10), 200);
+          setTimeout(() => tone(329.63, 0.5, 'sine', 0.09), 400);
+          setTimeout(() => tone(261.63, 0.8, 'sine', 0.07), 600);
+          break;
+        case 'victory':
+          // 通关庆祝 — 明亮上行五声音阶
+          tone(523.25, 0.15, 'sine', 0.15);
+          setTimeout(() => tone(659.25, 0.15, 'sine', 0.15), 120);
+          setTimeout(() => tone(783.99, 0.15, 'sine', 0.15), 240);
+          setTimeout(() => tone(1046.50, 0.3, 'sine', 0.15), 360);
+          setTimeout(() => tone(1318.51, 0.6, 'sine', 0.13), 480);
           break;
       }
     }
@@ -1655,7 +1765,7 @@
     function onPointerDown(e) {
       pointerDownPos = { x: e.clientX, y: e.clientY };
       isDragging = false;
-      // 雕刻阶段：触摸按下时立即显示 hover（移动端预览）
+      // 还原阶段：触摸按下时立即显示 hover（移动端预览）
       if (gameState === GameState.CARVING) {
         updateHover(e);
       }
@@ -1670,7 +1780,7 @@
         }
       }
 
-      // 雕刻阶段且未拖拽时更新 hover（鼠标移动 or 触摸未超出阈值）
+      // 还原阶段且未拖拽时更新 hover（鼠标移动 or 触摸未超出阈值）
       if (gameState === GameState.CARVING && !isDragging) {
         updateHover(e);
       } else if (hoveredIndex !== -1 && (isDragging || gameState !== GameState.CARVING)) {
@@ -1789,6 +1899,89 @@
     }
 
     // ============================================================
+    //  彩色碎片（Confetti）
+    // ============================================================
+    const confettiCanvas = document.getElementById('confetti-canvas');
+    const confettiCtx = confettiCanvas.getContext('2d');
+    let confettiParticles = [];
+    let confettiAnimId = null;
+
+    function resizeConfettiCanvas() {
+      confettiCanvas.width = window.innerWidth;
+      confettiCanvas.height = window.innerHeight;
+    }
+    resizeConfettiCanvas();
+    window.addEventListener('resize', resizeConfettiCanvas);
+
+    const CONFETTI_COLORS = ['#e0453b', '#f08c2e', '#d4a017', '#1ea672', '#2d7dd2', '#9b59b6', '#e91e63', '#00bcd4'];
+
+    function launchConfetti() {
+      const count = 120;
+      confettiParticles = [];
+      for (let i = 0; i < count; i++) {
+        confettiParticles.push({
+          x: window.innerWidth / 2 + (Math.random() - 0.5) * 200,
+          y: window.innerHeight / 2 + (Math.random() - 0.5) * 100,
+          vx: (Math.random() - 0.5) * 12,
+          vy: -Math.random() * 14 - 6,
+          gravity: 0.35,
+          size: Math.random() * 8 + 4,
+          color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+          rotation: Math.random() * Math.PI * 2,
+          rotSpeed: (Math.random() - 0.5) * 0.3,
+          shape: Math.random() > 0.5 ? 'rect' : 'circle',
+          life: 1.0,
+          fadeStart: 60 + Math.random() * 40,
+        });
+      }
+      if (confettiAnimId) cancelAnimationFrame(confettiAnimId);
+      animateConfetti();
+    }
+
+    let confettiFrame = 0;
+    function animateConfetti() {
+      confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+      confettiFrame++;
+      let alive = false;
+
+      confettiParticles.forEach(p => {
+        p.vy += p.gravity;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= 0.99;
+        p.rotation += p.rotSpeed;
+
+        if (confettiFrame > p.fadeStart) {
+          p.life -= 0.02;
+        }
+        if (p.life <= 0) return;
+        alive = true;
+
+        confettiCtx.save();
+        confettiCtx.translate(p.x, p.y);
+        confettiCtx.rotate(p.rotation);
+        confettiCtx.globalAlpha = Math.max(0, p.life);
+        confettiCtx.fillStyle = p.color;
+        if (p.shape === 'rect') {
+          confettiCtx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+        } else {
+          confettiCtx.beginPath();
+          confettiCtx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+          confettiCtx.fill();
+        }
+        confettiCtx.restore();
+      });
+
+      if (alive) {
+        confettiAnimId = requestAnimationFrame(animateConfetti);
+      } else {
+        confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+        confettiAnimId = null;
+        confettiFrame = 0;
+      }
+    }
+
+    // ============================================================
     //  分享 & Toast
     // ============================================================
     const SHARE_URL = 'https://howerlin.top/cube-memory/';
@@ -1833,6 +2026,9 @@
       dom.progressDisplay = document.getElementById('progress-display');
       dom.startScreen = document.getElementById('start-screen');
       dom.gameoverScreen = document.getElementById('gameover-screen');
+      dom.gameoverTitle = document.querySelector('#gameover-screen .gameover-title');
+      // dom.testSkipBtn = document.getElementById('test-skip-btn');
+      dom.continueBtn = document.getElementById('continue-btn');
       dom.resetBtn = document.getElementById('reset-btn');
       dom.confirmBtn = document.getElementById('confirm-btn');
       dom.celebrationRing = document.getElementById('celebration-ring');
@@ -1870,8 +2066,17 @@
         startGame();
       });
 
+      document.getElementById('continue-btn').addEventListener('click', () => {
+        hideGameOverScreen();
+        level++;
+        startLevel();
+      });
+
       document.getElementById('confirm-btn').addEventListener('click', confirmCarving);
       document.getElementById('reset-btn').addEventListener('click', resetCarving);
+
+      // 测试按钮（发布版本移除）
+      // dom.testSkipBtn.addEventListener('click', testPassLevel);
 
       document.getElementById('start-share-btn').addEventListener('click', shareLink);
       document.getElementById('gameover-share-btn').addEventListener('click', shareLink);
